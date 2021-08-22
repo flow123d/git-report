@@ -51,11 +51,11 @@ class Report:
         # split by 'commit: <HASH>" 
         commits = re.split("commit ([0-9a-fA-F]+)\n", git_log_stdout)
         for hash, log_item in zip(commits[1::2], commits[2::2]):
-            print("ITEM: ", log_item)
+            #print("ITEM: ", log_item)
             match = re.match("(?:Merge: ([ 0-9a-fA-F]+)\n)?Author: (.*)\nDate:   ([0-9]+)-([0-9]+)-([0-9]+)\n\n(.*)", log_item)
 
             assert(match)
-            print(match.groups())
+            #print(match.groups())
             _, author, year, month, day, message = match.groups()
             date = datetime.date(int(year), int(month), int(day))
             self.add_commit(Commit(date, repository, message, author, hash))
@@ -70,8 +70,9 @@ class Report:
     def print(self):
         for week in sorted(self.weeks.keys()):
             commits = self.weeks[week]
+            month = min([c.date.month for c in commits])
             commits.sort(key=lambda x: x.repository )
-            print(f"\n==== WEEK {week} ")
+            print(f"\n==== WEEK {week} ,month {month}")
             for c in commits:
                 print(f"  {c.repository:12} : {c.message.strip()}")
 
@@ -83,7 +84,6 @@ def check_output(args, workdir):
     error=""
     try:  
       with io.StringIO(error) as f:
-        print("CMD: ", args)
         cmd = subprocess.Popen(args, 
                                cwd=workdir,
                                stdout=subprocess.PIPE,
@@ -93,13 +93,14 @@ def check_output(args, workdir):
         commits = []
         print("Error: ", cmd_err)
     if cmd_err:
-        print("Warning: ", cmd_err)
+        if not re.match(b"fatal: not a git repository", cmd_err):
+            print("Warning: ", cmd_err)
 
-    print("FULL:", cmd_out)
+    #print("FULL:", cmd_out)
     return cmd_out.decode('utf-8')
 
 author = git_config_author()
-git_log_args=[f"--author={author}", "--date=short", "--all", "--since=9.months.ago"]
+git_log_args=[f"--author={author}", "--date=short", "--all", "--since=15.months.ago"]
 list_dir = os.getcwd()
 
 try:
