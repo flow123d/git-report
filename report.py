@@ -15,6 +15,7 @@ import sys
 import re
 import os
 import io
+import datetime
 
 @attr.s(auto_attribs=True)
 class Commit:
@@ -41,8 +42,7 @@ class Report:
         self.weeks = {}   # key is week tuple: (year, week number)
                           # value is list of commits
     
-    def add(self, git_log_stdout):
-        print("FULL:", git_log_stdout)
+    def add(self, repository, git_log_stdout):
         if (len(git_log_stdout) == 0 or 
            "Not a directory" in git_log_stdout or 
            "Not a git repository" in git_log_stdout):
@@ -50,10 +50,30 @@ class Report:
         
         # split by 'commit: <HASH>" 
         commits = re.split("commit ([0-9a-fA-F]+)\n", git_log_stdout)
-        print("COMMITS:", commits)
+        for hash, log_item in zip(commits[1::2], commits[2::2]):
+            print("ITEM: ", log_item)
+            match = re.match("(?:Merge: ([ 0-9a-fA-F]+)\n)?Author: (.*)\nDate:   ([0-9]+)-([0-9]+)-([0-9]+)\n\n(.*)", log_item)
 
-#>>> datetime.date(2019, 12, 31).isocalendar()
-#(2020, 1, 2)
+            assert(match)
+            print(match.groups())
+            _, author, year, month, day, message = match.groups()
+            date = datetime.date(int(year), int(month), int(day))
+            self.add_commit(Commit(date, repository, message, author, hash))
+        #print("COMMITS:", commits)
+
+    def add_commit(self, commit):
+        year, i_week, day = commit.date.isocalendar()
+        week = (year, i_week, 0)
+        week_list = self.weeks.setdefault(week, list())
+        week_list.append(commit)
+
+    def print(self):
+        for week in sorted(self.weeks.keys()):
+            commits = self.weeks[week]
+            commits.sort(key=lambda x: x.repository )
+            print(f"\n==== WEEK {week} ")
+            for c in commits:
+                print(f"  {c.repository:12} : {c.message.strip()}")
 
 
 def check_output(args, workdir):
@@ -75,6 +95,7 @@ def check_output(args, workdir):
     if cmd_err:
         print("Warning: ", cmd_err)
 
+    print("FULL:", cmd_out)
     return cmd_out.decode('utf-8')
 
 author = git_config_author()
@@ -91,13 +112,14 @@ except IndexError:
 report = Report()
 subdirs = os.listdir(list_dir)
 for d in subdirs:
-    print("\nList dir: ", d)
+    # print("\nList dir: ", d)
     full_path = os.path.join(list_dir, d)
     if not os.path.isdir(full_path):
         continue
     
     commits_out = check_output(["git", "log"] + git_log_args, full_path)
-    report.add(commits_out)
-    
+    report.add(d, commits_out)
+
+report.print()
 
 
